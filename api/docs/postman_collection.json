@@ -1,0 +1,399 @@
+{
+  "info": {
+    "_postman_id": "4b6c9343-7f28-4e89-a2bb-2309e3bb8899",
+    "name": "Clinitech Healthcare Dashboard API",
+    "description": "API collection for testing and inspecting the Clinitech Healthcare Dashboard NestJS backend endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "User Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@clinitech.com\",\n  \"password\": \"AdminPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/auth/login",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Exchanges email and password credentials for standard JWT access and refresh tokens."
+          },
+          "response": []
+        },
+        {
+          "name": "Token Refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"YOUR_REFRESH_TOKEN_HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/auth/refresh",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Requests a new short-lived access token using a valid, active refresh token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "User Portal (Client)",
+      "item": [
+        {
+          "name": "Get Profile Info",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/me",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "description": "Returns matching client profile metadata details based on the authenticated email."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Latest Health Report",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/me/latest-report",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "me",
+                "latest-report"
+              ]
+            },
+            "description": "Retrieves the client's single latest vital signs report."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Full Report History",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/me/report-history",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "me",
+                "report-history"
+              ]
+            },
+            "description": "Retrieves the full list of health reports on file in reverse-chronological order."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Portal",
+      "item": [
+        {
+          "name": "Get Clients Directory",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/admin/clients?page=1&limit=20&search=&city=&healthCondition=",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "admin",
+                "clients"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": ""
+                },
+                {
+                  "key": "city",
+                  "value": ""
+                },
+                {
+                  "key": "healthCondition",
+                  "value": ""
+                }
+              ]
+            },
+            "description": "Retrieves a paginated list of clients with optional search keywords, condition filters, and city filters."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specific Client File",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/admin/clients/C0001",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "admin",
+                "clients",
+                "C0001"
+              ]
+            },
+            "description": "Retrieves all details for a client alongside their full timeline of health reports."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Global Reports Log",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/admin/reports?page=1&limit=20",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "admin",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Retrieves a paginated global registry of all logged health reports."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Single Health Report (JSON)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_id\": \"R99999\",\n  \"client_id\": \"C0001\",\n  \"report_date\": \"2026-06-23T12:00:00.000Z\",\n  \"hemoglobin\": 14.2,\n  \"vitamin_d\": 38.5,\n  \"cholesterol\": 188.0,\n  \"blood_sugar_fasting\": 85.5,\n  \"creatinine\": 0.85,\n  \"urine_protein\": 0.1,\n  \"bmi\": 21.8,\n  \"doctor_notes\": \"Vitals stable.\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/admin/upload-health-report",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "admin",
+                "upload-health-report"
+              ]
+            },
+            "description": "Submits a single client report validated against strict schema rules."
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Bulk Health Reports (Excel/CSV File)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/admin/upload-health-report",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "admin",
+                "upload-health-report"
+              ]
+            },
+            "description": "Accepts multipart/form-data sheet uploads containing clinical reports to batch insert."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "ACCESS_TOKEN",
+      "value": "YOUR_JWT_ACCESS_TOKEN_HERE",
+      "type": "string"
+    }
+  ]
+}
