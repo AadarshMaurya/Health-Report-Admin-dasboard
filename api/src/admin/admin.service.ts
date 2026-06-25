@@ -9,6 +9,7 @@ import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { AuthService } from '../auth/auth.service';
 import * as xlsx from 'xlsx';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class AdminService {
@@ -99,14 +100,6 @@ export class AdminService {
       throw new BadRequestException('Failed to parse excel/csv file buffer');
     }
 
-    const firstSheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[firstSheetName];
-    const rows = xlsx.utils.sheet_to_json(sheet);
-
-    if (rows.length === 0) {
-      throw new BadRequestException('Uploaded file contains no rows');
-    }
-
     // Normalization helper for resilient column lookup
     const normalizeRow = (row: any) => {
       const normalized: any = {};
@@ -117,59 +110,181 @@ export class AdminService {
       return normalized;
     };
 
-    // Load active clients to validate relation integrity
-    const allClients = await this.clientRepository.find({ select: { client_id: true } });
-    const clientIds = new Set(allClients.map(c => c.client_id));
+    const parseNumber = (val: any): number | null => {
+      if (val === undefined || val === null || val === '') return null;
+      const num = parseFloat(val);
+      return isNaN(num) ? null : num;
+    };
 
+    const clientsToInsert: any[] = [];
     const reportsToInsert: any[] = [];
-    const skippedClientIds = new Set<string>();
+    const clientEmailsToCreateLogins = new Set<string>();
+    let totalRowsProcessed = 0;
 
-    for (const row of rows) {
-      const norm = normalizeRow(row);
-      const reportId = String(norm.reportid || norm.report_id || '').trim();
-      const clientId = String(norm.clientid || norm.client_id || '').trim();
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const rows = xlsx.utils.sheet_to_json(sheet);
+      if (rows.length === 0) continue;
 
-      if (!reportId || !clientId) continue;
+      totalRowsProcessed += rows.length;
 
-      if (!clientIds.has(clientId)) {
-        skippedClientIds.add(clientId);
-        continue;
-      }
+      for (const row of rows) {
+        const norm = normalizeRow(row);
+        const clientId = String(norm.clientid || norm.client_id || '').trim();
 
-      let rDate: Date;
-      if (norm.reportdate || norm.report_date) {
-        const dVal = norm.reportdate || norm.report_date;
-        if (typeof dVal === 'number') {
-          rDate = new Date((dVal - 25569) * 86400 * 1000);
-        } else {
-          rDate = new Date(dVal);
+        if (!clientId) continue;
+
+        // Check keys to determine if row has client data or report data
+        const keys = Object.keys(norm);
+        
+        const hasClientData = keys.some(k => 
+          ['fullname', 'email', 'mobile', 'city', 'state', 'occupation', 'beautygoal', 'healthcondition'].includes(k)
+        );
+
+        const hasReportData = keys.some(k => 
+          ['reportid', 'reportdate', 'hemoglobin', 'vitamind', 'vitd', 'cholesterol', 'bloodsugarfasting', 'bloodsugar', 'creatinine', 'urineprotein', 'urine', 'bmi', 'doctornotes', 'notes'].includes(k)
+        );
+
+        // If it doesn't clearly match either but has a name, default to client
+        const isClient = hasClientData || (norm.fullname || norm.full_name || norm.name);
+        // If it has report_id, it is a report
+        const isReport = hasReportData || (norm.reportid || norm.report_id);
+
+        if (isClient) {
+          let cDate: Date;
+          if (norm.createdat || norm.created_at) {
+            const dVal = norm.createdat || norm.created_at;
+            if (typeof dVal === 'number') {
+              cDate = new Date((dVal - 25569) * 86400 * 1000);
+            } else {
+              cDate = new Date(dVal);
+            }
+          } else {
+            cDate = new Date();
+          }
+
+          const email = norm.email ? String(norm.email).toLowerCase().trim() : null;
+
+          clientsToInsert.push({
+            client_id: clientId,
+            full_name: String(norm.fullname || norm.full_name || norm.name || 'Unknown Client').trim(),
+            email: email,
+            mobile: norm.mobile ? String(norm.mobile).trim() : null,
+            city: norm.city ? String(norm.city).trim() : null,
+            state: norm.state ? String(norm.state).trim() : null,
+            age: norm.age ? parseInt(norm.age, 10) : null,
+            gender: norm.gender ? String(norm.gender).trim() : null,
+            occupation: norm.occupation ? String(norm.occupation).trim() : null,
+            health_condition: norm.healthcondition || norm.health_condition ? String(norm.healthcondition || norm.health_condition).trim() : null,
+            beauty_goal: norm.beautygoal || norm.beauty_goal ? String(norm.beautygoal || norm.beauty_goal).trim() : null,
+            created_at: cDate,
+          });
+
+          if (email) {
+            clientEmailsToCreateLogins.add(email);
+          }
         }
-      } else {
-        rDate = new Date();
-      }
 
-      reportsToInsert.push({
-        report_id: reportId,
-        client_id: clientId,
-        report_date: rDate,
-        hemoglobin: norm.hemoglobin ? parseFloat(norm.hemoglobin) : null,
-        vitamin_d: (norm.vitamind || norm.vit_d) ? parseFloat(norm.vitamind || norm.vit_d) : null,
-        cholesterol: norm.cholesterol ? parseFloat(norm.cholesterol) : null,
-        blood_sugar_fasting: (norm.bloodsugarfasting || norm.blood_sugar) ? parseFloat(norm.bloodsugarfasting || norm.blood_sugar) : null,
-        creatinine: norm.creatinine ? parseFloat(norm.creatinine) : null,
-        urine_protein: (norm.urineprotein || norm.urine) ? parseFloat(norm.urineprotein || norm.urine) : null,
-        bmi: norm.bmi ? parseFloat(norm.bmi) : null,
-        doctor_notes: norm.doctornotes || norm.notes || norm.doctor_notes ? String(norm.doctornotes || norm.notes || norm.doctor_notes).trim() : null,
-      });
+        if (isReport) {
+          const reportId = String(norm.reportid || norm.report_id || '').trim();
+          if (reportId) {
+            let rDate: Date;
+            if (norm.reportdate || norm.report_date) {
+              const dVal = norm.reportdate || norm.report_date;
+              if (typeof dVal === 'number') {
+                rDate = new Date((dVal - 25569) * 86400 * 1000);
+              } else {
+                rDate = new Date(dVal);
+              }
+            } else {
+              rDate = new Date();
+            }
+
+            reportsToInsert.push({
+              report_id: reportId,
+              client_id: clientId,
+              report_date: rDate,
+              hemoglobin: parseNumber(norm.hemoglobin),
+              vitamin_d: parseNumber(norm.vitamind || norm.vit_d || norm.vitamin_d),
+              cholesterol: parseNumber(norm.cholesterol),
+              blood_sugar_fasting: parseNumber(norm.bloodsugarfasting || norm.blood_sugar || norm.blood_sugar_fasting),
+              creatinine: parseNumber(norm.creatinine),
+              urine_protein: parseNumber(norm.urineprotein || norm.urine || norm.urine_protein),
+              bmi: parseNumber(norm.bmi),
+              doctor_notes: norm.doctornotes || norm.notes || norm.doctor_notes ? String(norm.doctornotes || norm.notes || norm.doctor_notes).trim() : null,
+            });
+          }
+        }
+      }
     }
 
-    if (reportsToInsert.length > 0) {
+    // Insert clients first to avoid foreign key constraint violations
+    if (clientsToInsert.length > 0) {
       const chunkSize = 1000;
-      for (let i = 0; i < reportsToInsert.length; i += chunkSize) {
-        const chunk = reportsToInsert.slice(i, i + chunkSize);
+      for (let i = 0; i < clientsToInsert.length; i += chunkSize) {
+        const chunk = clientsToInsert.slice(i, i + chunkSize);
+        await this.clientRepository.createQueryBuilder()
+          .insert()
+          .values(chunk)
+          .orIgnore()
+          .execute();
+      }
+
+      // Create login accounts for any new unique emails
+      if (clientEmailsToCreateLogins.size > 0) {
+        const emailsArray = Array.from(clientEmailsToCreateLogins);
+        const existingUsers = await this.userRepository.createQueryBuilder('user')
+          .where('user.email IN (:...emails)', { emails: emailsArray })
+          .select(['user.email'])
+          .getMany();
+        const existingEmails = new Set(existingUsers.map(u => u.email.toLowerCase().trim()));
+
+        const newEmailsToCreate = emailsArray.filter(email => !existingEmails.has(email));
+        if (newEmailsToCreate.length > 0) {
+          const defaultUserPassword = 'Password123';
+          const userPasswordHash = await bcrypt.hash(defaultUserPassword, 10);
+
+          const userValues = newEmailsToCreate.map(email => ({
+            email: email,
+            password_hash: userPasswordHash,
+            role: UserRole.USER,
+          }));
+
+          const userChunkSize = 1000;
+          for (let i = 0; i < userValues.length; i += userChunkSize) {
+            const chunk = userValues.slice(i, i + userChunkSize);
+            await this.userRepository.createQueryBuilder()
+              .insert()
+              .values(chunk)
+              .orIgnore()
+              .execute();
+          }
+        }
+      }
+    }
+
+    // Load active clients to validate relation integrity for report inserts
+    const allClients = await this.clientRepository.find({ select: { client_id: true } });
+    const clientIdsInDb = new Set(allClients.map(c => c.client_id));
+
+    const reportsToInsertFiltered: any[] = [];
+    const skippedClientIds = new Set<string>();
+
+    for (const report of reportsToInsert) {
+      if (clientIdsInDb.has(report.client_id)) {
+        reportsToInsertFiltered.push(report);
+      } else {
+        skippedClientIds.add(report.client_id);
+      }
+    }
+
+    if (reportsToInsertFiltered.length > 0) {
+      const chunkSize = 1000;
+      for (let i = 0; i < reportsToInsertFiltered.length; i += chunkSize) {
+        const chunk = reportsToInsertFiltered.slice(i, i + chunkSize);
         await this.reportRepository.createQueryBuilder()
           .insert()
-          .values(chunk as any[])
+          .values(chunk)
           .orIgnore()
           .execute();
       }
@@ -177,12 +292,13 @@ export class AdminService {
 
     return {
       message: 'Bulk report upload processed successfully',
-      total_rows_found: rows.length,
-      successfully_imported: reportsToInsert.length,
+      total_rows_found: totalRowsProcessed,
+      successfully_imported: clientsToInsert.length + reportsToInsertFiltered.length,
       skipped_missing_clients_count: skippedClientIds.size,
       skipped_client_ids: Array.from(skippedClientIds).slice(0, 50),
     };
   }
+
 
   async getClients(
     page: number = 1,
